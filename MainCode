@@ -1,0 +1,589 @@
+import pandas as pd
+import numpy as np
+import seaborn as sns
+from sklearn.linear_model import LinearRegression
+from sklearn import metrics
+from sklearn.model_selection import train_test_split # module to split our data into train and test sets
+from statsmodels.stats.outliers_influence import variance_inflation_factor # a module to evaluate the variance inflation factor (VIF)
+
+import statsmodels.api as sm
+import statsmodels.tools 
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Inputting all the data and setting max rows and columns
+pd.set_option("max_colwidth", 50)
+pd.options.display.max_rows = 20
+Cmax=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_C-max.txt')
+Edge=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Edge.txt')
+Fiesta=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Fiesta.txt')
+Focus=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Focus.txt')
+Fusion=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Fusion.txt')
+Galaxy=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Galaxy.txt')
+Grand_Cmax=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Grand C-max.txt')
+Kaplus=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Ka+.txt')
+Ka=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Ka.txt')
+Kuga=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Kuga.txt')
+Mondeo=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Mondeo (1).txt')
+Puma=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Puma.txt')
+Mustang=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Mustang.txt')
+Ranger=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Ranger.txt')
+Smax=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_S-max.txt')
+Transit_Custom=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Transit Custom.txt')
+Transit=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_Transit.txt')
+Bmax=pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Ford_B-max.txt')
+# Combining all the data into one big dataset
+cars=pd.concat([Cmax,Edge,Fiesta,Focus,Fusion,Galaxy,Grand_Cmax,Kaplus,Ka,Kuga,Mondeo,Puma,Mustang,Ranger,Smax,Transit_Custom,Transit,Bmax])
+cars=cars.reset_index(drop=True)
+
+# Remove £ and , from price values to turn them into int32
+cars.price = cars.price.str.replace('£','').str.replace(',','')
+cars = cars.astype({'price': 'int32'})
+
+# Transform engine into an float and observe correlation
+cars.engine = cars.engine.str.replace('L','')
+cars = cars.astype({'engine': 'float64'})
+
+
+
+cars['name'].unique()
+# What a mess! 
+
+# This function takes all names which aren't just normal names, and adds a binary indicator called special which puts a 1 if they are in the list and 0 otherwise
+names = ['Ford C-Max Diesel Estate',
+       'Ford C-Max Estate', 'Ford Edge Diesel Estate',
+       'Ford Edge Vignale', 'Ford Edge Vignale Diesel Estate',
+       'Ford Edge-Vignale', 'Ford Fiesta Van',
+       'Ford Fiesta St',
+       'Ford Fiesta 1.0 Titanium X EcoBoost (S/S) 5Dr Hatchback',
+       'Ford Fiesta Hatchback Special Editions', 'Ford Fiesta Vignale',
+       'Ford Fiesta-Vignale','Ford Focus Rs',
+       'Ford Focus Hatchback', 'Ford Focus Diesel Hatchback',
+       'Ford Focus St', 'Ford Focus St Tdci',
+       'Ford Ford Focus Titanium X', 'Ford Focus Hatchback 5-Door',
+       'Ford Focus Estate', 'Ford Focus-Vignale', 'Ford Focus Vignale',
+       'Ford FOCUS (C346)', 'Ford Focus Active', 'Ford -',
+       'Ford Focus Diesel Estate', 'Ford Focus Active X',
+       'Ford Focus 1.0T EcoBoost Active X (s/s) 5dr',
+       'Ford Fusion Estate',
+       'Ford Galaxy 2.0 EcoBlue Titanium Auto (s/s) 5dr', 
+       'Ford Grand C-Max Diesel Estate',
+       'Ford Grand C-Max Titanium',
+       'Ford Ka+ hatchback','Ford Ka-Plus',
+       'Ford KA Hatchback','Ford Kuga Diesel Estate',
+       'Ford Kuga Estate', 'Ford Kuga Vignale', 'Ford Kuga-Vignale',
+       'Ford Kuga Vignale Diesel Estate', 'Ford Kuga St Line',
+       'Ford Kuga 2.0 TDCi Titanium (150 PS) 5-Door MPV',
+       'Ford Puma Suv',
+       'Ford Puma Hatchback Special Editions', 'Ford Puma Hatchback',
+       'Ford Puma St', 'Ford Mustang', 'Ford Mustang Convertible',
+       'Ford Mustang 5.0 V8 GT Fastback 2dr', 'Ford Mustang Fastback',
+       'Ford Mustang Gt', 'Ford Mustang Ecoboost',
+       'Ford Ranger Diesel',
+       'Ford Ranger 3.2TDCi (200 PS) Wildtrak 4x4 DC Pick-Up',
+       'Ford Ranger 3.2 TDCi Wildtrak Double Cab Pickup Auto 4W',
+       'Ford Ranger Raptor',
+       'Ford Ford Ranger 3.2 TDCi Wildtrak Double Cab Pickup Au',
+       'Ford S-Max Diesel Estate', 'Ford S-Max Vignale',
+       'Ford S-Max-Vignale',
+       'Ford Transit Custom 290 L1 Diesel Fwd'
+       , 'Ford Transit Custom (vat Free)',
+       'Ford Transit Custom 320 L2 Diesel Fwd',
+       'Ford Transit Custom 300 L2 Diesel Fwd', 'Ford Transit Custom 320',
+       'Ford Transit Custom 300 L1 Diesel Fwd',
+       'Ford Transit Custom 320 L1 Diesel Fwd',
+       'Ford TRANSIT CAMPERVAN, 2.0 290 LIMITED CAMPER']
+
+for i in names:
+  cars['special'] = np.where(cars['name']==i, 1, 0)
+
+# Creating a function to make all names conform to whatever you put in it
+def propername(current,new):
+  names_to_change = cars.index[cars['name'].isin(current)].tolist()
+  cars.at[names_to_change, 'name'] = new
+# Using the function to rename the cars
+propername(['Ford C-Max','Ford C-Max Diesel Estate', 'Ford C Max','Ford C-Max Estate'],'C-Max')
+propername(['Ford Edge', 'Ford Edge Diesel Estate',
+       'Ford Edge Vignale', 'Ford Edge Vignale Diesel Estate',
+       'Ford Edge-Vignale'],'Edge')
+propername(['Ford Fiesta', 'Ford Fiesta Hatchback',
+       'Ford Fiesta Hatchback 5-Door', 'Ford Fiesta Van',
+       'Ford Fiesta St',
+       'Ford Fiesta 1.0 Titanium X EcoBoost (S/S) 5Dr Hatchback',
+       'Ford Fiesta Hatchback Special Editions', 'Ford Fiesta Vignale',
+       'Ford Fiesta-Vignale'],'Fiesta')
+propername(['Ford Focus',
+       'Ford Focus Rs', 'Ford Focus Hatchback',
+       'Ford Focus Diesel Hatchback', 'Ford Focus St',
+       'Ford Focus St Tdci', 'Ford Ford Focus Titanium X',
+       'Ford Focus Hatchback 5-Door', 'Ford Focus Estate',
+       'Ford Focus-Vignale', 'Ford Focus Vignale', 'Ford FOCUS (C346)',
+       'Ford Focus Active', 'Ford -', 'Ford Focus Diesel Estate',
+       'Ford Focus Active X',
+       'Ford Focus 1.0T EcoBoost Active X (s/s) 5dr'],'Focus')
+propername(['Ford Fusion', 'Ford Fusion Estate'],'Fusion')
+propername(['Ford Galaxy',
+       'Ford Galaxy 2.0 EcoBlue Titanium Auto (s/s) 5dr'],'Galaxy')
+propername(['Ford Grand C-Max', 'Ford Grand C-Max Diesel Estate',
+       'Ford Grand C-Max Titanium'],'Grand C-Max')
+propername(['Ford KA+',  'Ford KA Plus',
+       'Ford Ka+ hatchback', 'Ford KA +', 'Ford Ka-Plus'],'KA Plus')
+propername(['Ford KA', 'Ford KA Hatchback'], 'KA')
+propername(['Ford Kuga', 'Ford Kuga Diesel Estate',
+       'Ford Kuga Estate', 'Ford Kuga Vignale', 'Ford Kuga-Vignale',
+       'Ford Kuga Vignale Diesel Estate', 'Ford Kuga St Line',
+       'Ford Kuga 2.0 TDCi Titanium (150 PS) 5-Door MPV'],'Kuga')
+propername(['Ford Mondeo'],'Mondeo')
+propername(['Ford Puma',
+       'Ford Puma Suv', 'Ford Puma Hatchback Special Editions',
+       'Ford Puma Hatchback', 'Ford Puma St'],'Puma')
+propername(['Ford Mustang',
+       'Ford Mustang Convertible', 'Ford Mustang 5.0 V8 GT Fastback 2dr',
+       'Ford Mustang Fastback', 'Ford Mustang Gt',
+       'Ford Mustang Ecoboost'],'Mustang')
+propername(['Ford Ranger', 'Ford Ranger Diesel',
+       'Ford Ranger 3.2TDCi (200 PS) Wildtrak 4x4 DC Pick-Up',
+       'Ford Ranger Raptor','Ford Ranger 3.2 TDCi Wildtrak Double Cab Pickup Auto 4W',
+       'Ford Ford Ranger 3.2 TDCi Wildtrak Double Cab Pickup Au'],'Ranger')
+propername(['Ford S-Max', 'Ford S-Max Diesel Estate',
+       'Ford S-Max Vignale', 'Ford S-Max-Vignale'],'S-Max')
+# Notice in the Ford Transit Customs (below) there are a couple of Ford Tourneos,
+# These will be removed later (but not for now as we don't want to mess up the index numbers)
+propername(['Ford Transit Custom',
+       'Ford Transit Custom 290 L1 Diesel Fwd', 'Ford Custom',
+       'Ford Tourneo Custom', 'Ford Transit Custom (vat Free)',
+       'Ford Transit Custom 320 L2 Diesel Fwd',
+       'Ford Transit Custom 300 L2 Diesel Fwd', 'Ford Transit Custom 320',
+       'Ford Transit Custom 300 L1 Diesel Fwd',
+       'Ford Transit Custom 320 L1 Diesel Fwd'],'Transit Custom')
+propername(['Ford Transit',
+       'Ford TRANSIT CAMPERVAN, 2.0 290 LIMITED CAMPER'],'Transit')
+propername(['Ford B-Max',
+       'Ford B-Max Hatchback'],'B-Max')
+
+# Dealing with the null mileages 
+cars.at[13583, 'mileage'] = 8315.0
+cars.at[13660, 'mileage'] = 8003.0
+cars.at[20279, 'mileage'] = 16685.0
+cars.at[25096, 'mileage'] = 89952.0
+cars.at[26984, 'mileage'] = 79871.0
+cars.at[27998, 'mileage'] = 196.0
+cars.at[28006, 'mileage'] = 5000.0
+cars.at[28754, 'mileage'] = 73644.0
+
+
+# We found that the fuel nulls were all petrol by checking the MOTs of each car
+cars.fuel.fillna('Petrol',inplace=True)
+
+# We then found that ULEZ nulls meant that the car was not ULEZ compliant, 
+# so we replace these with 0 for nulls and 1 for ULEZ compliant cars
+cars.ULEZ.fillna(0,inplace=True)
+cars.ULEZ.replace('ULEZ',1,inplace=True)
+
+# We filled engine nulls by finding a car which had a matching name, body type, transmission and fuel type and then using that to fill the null
+cars['engine'] = cars['engine'].fillna(cars.groupby(['name','body','transmission', 'fuel'])['engine'].apply(
+    lambda x: x.fillna(x.mode()[0])))
+
+
+# Changing null transmissions based on adverts
+cars.at[963, 'transmission'] = 'Automatic'
+cars.at[2462, 'transmission'] = 'Manual'
+cars.at[6021, 'transmission'] = 'Manual'
+cars.at[6323, 'transmission'] = 'Manual'
+cars.at[6502, 'transmission'] = 'Manual'
+cars.at[11543, 'transmission'] = 'Manual'
+cars.at[12027, 'transmission'] = 'Manual'
+cars.at[12547, 'transmission'] = 'Manual'
+cars.at[13660, 'transmission'] = 'Manual'
+cars.at[13676, 'transmission'] = 'Manual'
+cars.at[14168, 'transmission'] = 'Manual'
+cars.at[18056, 'transmission'] = 'Manual'
+cars.at[18860, 'transmission'] = 'Manual'
+cars.at[24671, 'transmission'] = 'Automatic'
+cars.at[24728, 'transmission'] = 'Automatic'
+cars.at[24748, 'transmission'] = 'Automatic'
+cars.at[24786, 'transmission'] = 'Automatic'
+cars.at[24828, 'transmission'] = 'Automatic'
+cars.at[24834, 'transmission'] = 'Automatic'
+cars.at[24913, 'transmission'] = 'Automatic'
+cars.at[24991, 'transmission'] = 'Automatic'
+cars.at[25019, 'transmission'] = 'Manual'
+cars.at[26054, 'transmission'] = 'Manual'
+cars.at[26057, 'transmission'] = 'Automatic'
+cars.at[26578, 'transmission'] = 'Manual'
+cars.at[28809, 'transmission'] = 'Manual'
+cars.at[28830, 'transmission'] = 'Manual'
+cars.at[28910, 'transmission'] = 'Manual'
+cars.at[29115, 'transmission'] = 'Manual'
+cars.at[29117, 'transmission'] = 'Manual'
+## Since transmission only takes two values, we can make it a binary variable
+cars.transmission.replace('Manual',0,inplace=True)
+cars.transmission.replace('Automatic',1,inplace=True)
+
+# Fiesta nulls are all car derived vans
+cars.at[cars.index[(cars['name'] == 'Fiesta') & (cars.body.isna() == True)].tolist(),'body']='Car Derived Van'
+
+# Kuga null is an SUV
+cars.at[cars.index[(cars['name'] == 'Kuga') & (cars.body.isna() == True)].tolist(),'body']='SUV'
+
+# Puma null is a hatchback
+cars.at[cars.index[(cars['name'] == 'Puma') & (cars.body.isna() == True)].tolist(),'body']='Hatchback'
+
+# Mustang nulls are all coupes
+cars.at[cars.index[(cars['name'] == 'Mustang') & (cars.body.isna() == True)].tolist(),'body']='Coupe'
+# One Mustang is listed as a Saloon but is a convertible
+cars.at[26088,'body']='Convertible'
+# Ranger nulls are all pickups
+cars.at[cars.index[(cars['name'] == 'Ranger') & (cars.body.isna() == True)].tolist(),'body']='Pickup'
+
+# Ford Focus
+# By manually checking the three nulls, we see that two are hatchbacks and one is an estate
+cars.at[10379,'body']='Hatchback'
+cars.at[15169,'body']='Hatchback'
+cars.at[10403,'body']='Estate'
+
+# Ford Transit Custom nulls are all some sort of vans. Some are campers but are still very similar to vans.
+# We can just call all of these vans.
+cars.at[cars.index[(cars['name'] == 'Transit Custom').tolist()],'body']='Van'
+
+# Ford Transits
+# All ford transit nulls are combi vans
+cars.at[cars.index[(cars['name'] == 'Transit') & (cars.body.isna() == True)].tolist(),'body']='Combi Van'
+
+# Deleting the Ford Tourneos, there were only two
+cars=cars.drop(index=28846)
+cars=cars.drop(index=28832)
+# We drop a ford mustang which is problematic in our data due to having a c in it's numberplate, it is a rare car so this shouldn't affect the bulk of the model
+cars=cars.drop(index=26348)
+
+# We drop link as this is merely the link to the car, it was useful in our EDA but not for the model
+# We also drop BHP and owners, most entries had nulls for these values so we decided to just drop them
+cars=cars.drop(columns=['link','BHP','owners'])
+# We now drop the rows with null values for year
+cars.dropna(inplace=True)
+
+# We decided to have the registration as a seperate column, perhaps having a newer reg would be more desireable?
+cars['year_'] = cars.year.str.split(expand=True)[0]
+
+cars['reg'] = cars.year.str.split(expand=True)[1].str.replace('(','')
+
+cars.drop(columns = ['year'], inplace = True)
+
+cars = cars.rename(columns = {'year_':'year'})
+
+# We decided to convert year to an age count instead, as this would be easier to use with linear regression
+cars['year']=cars['year'].astype(int)
+
+cars['age'] = (2021 - cars['year'])
+cars.drop(columns = ['year'], inplace = True)
+# We make a new column with the first digit of reg and then make it binary
+cars['registration'] = cars['reg'].str[:1]
+cars = cars.astype({'registration':'int32'})
+cars.registration.replace([0,1,2], 1, inplace=True)
+cars.registration.replace([5,6,7], 0, inplace=True)
+cars.drop(columns=['reg'], inplace = True)
+
+
+# This function finds the upper and lower bounds, which we subsequently use to remove outliers
+def outliers(column):
+ sorted(column)
+ q1,q3 = np.percentile(column,[25,75])
+ IQR = q3-q1
+ lower_bound = float(q1-(1.5 * IQR))
+ upper_bound = float(q3+(1.5 * IQR))
+ return lower_bound,upper_bound
+ # Using the bounds to remove outliers
+lowerbound,upperbound = outliers(cars['price'])
+cars.drop(cars[(cars.price > upperbound) | (cars.price < lowerbound)].index , inplace=True)
+
+lowerbound,upperbound = outliers(cars['mileage'])
+cars.drop(cars[(cars.mileage > upperbound) | (cars.mileage < lowerbound)].index , inplace=True)
+
+lowerbound,upperbound = outliers(cars['age'])
+cars.drop(cars[(cars.age > upperbound) | (cars.age < lowerbound)].index , inplace=True)
+
+lowerbound,upperbound = outliers(cars['engine'])
+cars.drop(cars[(cars.engine > upperbound) | (cars.engine < lowerbound)].index , inplace=True)
+
+# Putting age into bins
+cars.age = pd.qcut(cars['age'], q=4)
+
+# Putting engine into bins 
+cars.engine = pd.cut(cars['engine'], bins=[0,1.0,1.4,1.8,2.4,3.2])
+
+# This column ended up being all 0s, they were all removed by the outlier check. We drop it to avoid it messing up our regression
+cars=cars.drop(columns='special')
+
+## **LINEAR REGRESSION**
+
+# We drop the 'legendary five'. Models which have their own model just for themselves
+main = cars.drop(cars[cars['name']=='Transit Custom'].index)
+main = main.drop(main[main['name']=='Mustang'].index)
+main = main.drop(main[main['name']=='Ranger'].index)
+main = main.drop(main[main['name']=='Transit'].index)
+main = main.drop(main[main['name']=='Edge'].index)
+# Train Test Split
+feature_cols = list(main.columns)
+feature_cols.remove('price')
+X = main[feature_cols]
+y = main['price']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 67)
+
+# Getting our dummies and adding the constant
+def feature_eng(df):
+  df = pd.get_dummies(df, columns = ['name'], drop_first = True, prefix = 'name')
+  df = pd.get_dummies(df, columns = ['fuel'], drop_first = True, prefix = 'fuel')
+  df = pd.get_dummies(df, columns = ['body'], drop_first = True, prefix = 'body')
+  df = pd.get_dummies(df, columns = ['age'], drop_first = True, prefix = 'age')
+  df = pd.get_dummies(df, columns = ['engine'], drop_first = True, prefix = 'engine')
+  df = sm.add_constant(df)
+  return df
+
+# Feature engineering X_train and X_test.
+# We can do these together since all we are actually doing is getting dummies and adding a constant.
+X_train = feature_eng(X_train)
+X_test = feature_eng(X_test)
+
+# The VIF calculation
+def calculate_vif(X, thresh=5.0):
+    variables = list(range(X.shape[1]))
+    dropped = True
+    while dropped:
+        dropped = False
+        vif = [variance_inflation_factor(X.iloc[:, variables].values, ix)
+               for ix in range(X.iloc[:, variables].shape[1])]
+
+        maxloc = vif.index(max(vif))
+        if max(vif) > thresh:
+            print('dropping \'' + X.iloc[:, variables].columns[maxloc] +
+                  '\' at index: ' + str(maxloc))
+            del variables[maxloc]
+            dropped = True
+
+    print('Remaining variables:')
+    print(X.columns[variables])
+    return X.iloc[:, variables]
+
+# Commented out to avoid having to run this every time the code is run, this was used to build the initial model
+#calculate_vif_(X_train)
+
+# Building the Linear Regression Model
+feature_cols=['transmission', 'registration', 'name_C-Max', 'name_Fiesta',
+       'name_Focus', 'name_Fusion', 'name_Galaxy', 'name_Grand C-Max',
+       'name_KA', 'name_KA Plus', 'name_Kuga','body_SUV', 'name_Mondeo', 'name_Puma',
+       'name_S-Max', 'fuel_Petrol Hybrid', 'fuel_Petrol Plug-in Hybrid',
+       'body_Estate', 'body_Saloon', 'age_(2.0, 4.0]', 'age_(4.0, 8.0]',
+       'age_(8.0, 16.0]', 'engine_(1.0, 1.4]', 'engine_(1.4, 1.8]',
+       'engine_(1.8, 2.4]', 'engine_(2.4, 3.2]','const']
+lin_reg = sm.OLS(y_train, X_train[feature_cols])
+results = lin_reg.fit()
+results.summary()
+
+# Checking our train RMSE 
+X_train = X_train[feature_cols]
+X_train['pred'] = results.predict(X_train)
+rmse = statsmodels.tools.eval_measures.rmse(y_train, X_train['pred'])
+print(rmse)
+# Checking our test RMSE
+X_test = X_test[feature_cols]
+X_test['pred'] = results.predict(X_test)
+rmse = statsmodels.tools.eval_measures.rmse(y_test, X_test['pred'])
+print(rmse)
+
+# We can have a look at the variance of each factor here.
+# If constant is still in X_train, it will make the variance look very strange.
+pd.set_option('display.max_rows', 30)
+pd.set_option('display.min_rows', 30)
+pd.Series([variance_inflation_factor(X_train[feature_cols].values, i) for i in range(X_train[feature_cols].shape[1])], index = X_train[feature_cols].columns)
+
+# `Final Calculation`
+
+# This is a funciton which feature engineers models with only one type of Ford (such as Transits, Mustangs)
+# It adds the constant and dummies
+def feature_eng_bodies(df):
+  df = sm.add_constant(df)
+  df = pd.get_dummies(df, columns = ['fuel'], drop_first = True, prefix = 'fuel')
+  df = pd.get_dummies(df, columns = ['body'], drop_first = True, prefix = 'body')
+  df = pd.get_dummies(df, columns = ['age'], drop_first = True, prefix = 'age')
+  df = pd.get_dummies(df, columns = ['engine'], drop_first = True, prefix = 'engine')
+  return df
+# This is a function which builds a regression model for a given model. It is only used on Transits, Transit Customs, Mustangs, Rangers and Edges
+def buildamodel(n):
+  # Creates a dataframe which is nicely named, not that this matters
+  mdl=(n+'s')
+  # Finding the data for the dataframe, we only want occurrences where the name is a match.
+  mdl=cars[(cars.name==n)]
+  mdl.reset_index(drop=True)
+  mdl=mdl.drop(columns=['name'])
+  feature_cols = list(mdl.columns)
+  feature_cols.remove('price')
+  THE_X=(n+'X')
+  THE_y=(n+'y')
+  THE_X = mdl[feature_cols]
+  THE_y = mdl['price']
+  # Here we do our train test split
+  THE_X_train, THE_X_test, THE_y_train, THE_y_test = train_test_split(THE_X, THE_y, test_size = 0.2, random_state = 67)
+  # And here we call the feature engineering function from above
+  THE_X_train=feature_eng_bodies(THE_X_train)
+  # Each model had different feature columns for optimum performance, we use an if statement to select the right columns for the model
+  specials = {
+   "Transit Custom": ['transmission', 'ULEZ', 'age_(2.0, 4.0]',
+        'age_(4.0, 8.0]','const'],
+   "Transit": ['ULEZ','registration', 'age_(2.0, 4.0]',
+        'age_(4.0, 8.0]', 'age_(8.0, 16.0]','const'],
+   "Ranger": ['ULEZ','transmission', 'registration', 'age_(2.0, 4.0]',
+        'age_(4.0, 8.0]', 'age_(8.0, 16.0]','const'],
+   "Mustang": ['const', 'transmission', 'ULEZ', 'registration',
+        'body_Coupe', 'age_(2.0, 4.0]', 'age_(4.0, 8.0]'],
+   "Edge": ['ULEZ', 'registration', 'age_(2.0, 4.0]', 'age_(4.0, 8.0]',
+      'const']}
+  if n in specials: 
+     feature_cols = specials[n]
+
+  # Creating the linear regression model using the appropriate columns
+  lin_reg = sm.OLS(THE_y_train, THE_X_train[feature_cols])
+  results = lin_reg.fit()
+  answers=results.params.to_dict()
+  return answers
+# This is the main function which we put our inputs into. It takes a dictionary as an input.
+def suggest_price__MAKE(car_input):
+# This model is only for Fords!
+  if car_input['make']=='Ford':
+# Setting the price = 0 for use later
+    real_price=0
+# These will be the final multipliers based on the condition of the car
+    if car_input['Condition'] == 'No Damage':
+      discount = 0.8
+    if car_input['Condition'] == 'Moderate Damage':
+      discount = 0.5
+    if car_input['Condition'] == 'Heavy Damage':
+      discount = 0.3
+# Here we make our data to be used in the dataframe into a dictionary
+    cardata={'name':[car_input['model']],'engine':[car_input['Engine']],'year':[car_input['year']],'ULEZ':[car_input['ULEZ']],'transmission':[car_input['transmission']],'body':[car_input['body']],'fuel':[car_input['fuel']]}
+# Creating the dataframe
+    carreal = pd.DataFrame.from_dict(data=cardata)
+# Replacing the transmission with a binary 0 or 1
+    carreal.transmission.replace('Manual',0,inplace=True)
+    carreal.transmission.replace('Automatic',1,inplace=True)
+# Doing the same for ULEZ. which isn't used in the main model but is for Transit Customs and Mustangs
+    carreal.ULEZ.replace('ULEZ',1,inplace=True)
+    carreal.ULEZ.replace('No',0,inplace=True)
+    carreal.ULEZ.replace('Yes',1,inplace=True)
+    carreal.ULEZ.fillna(0,inplace=True)
+# We split year into age and a check whether registration is of the form where it matches the year the car came out, or is +50.
+    carreal['year_'] = carreal.year.str.split(expand=True)[0]
+    carreal['reg'] = carreal.year.str.split(expand=True)[1].str.replace('(','')
+    carreal.drop(columns = ['year'], inplace = True) 
+    carreal = carreal.rename(columns = {'year_':'year'}) 
+    carreal['year']=carreal['year'].astype(int)
+    carreal['age'] = (2021 - carreal['year']) 
+    carreal.drop(columns = ['year'], inplace = True)
+    carreal['registration'] = carreal['reg'].str[:1]
+    carreal = carreal.astype({'registration':'int32'})
+    carreal.registration.replace([0,1,2], 1, inplace=True)
+    carreal.registration.replace([5,6,7], 0, inplace=True)
+    carreal.drop(columns=['reg'], inplace = True)
+# We turn engine into a float
+    carreal.engine = carreal.engine.str.replace('L','')
+    carreal = carreal.astype({'engine': 'float64'})
+# And then we turn engine into intervals, placing the cars engine into the correct interval. 
+# This is because we use intervals in the model.
+    if carreal.iloc[0].engine == 1.0:
+      carreal.engine = pd.Interval(left=0.0,right=1.0,closed='right')
+    elif 1.0< carreal.iloc[0].engine <= 1.4:
+      carreal.engine = pd.Interval(left=1.0,right=1.4,closed='right')
+    elif 1.4< carreal.iloc[0].engine <= 1.8:
+      carreal.engine = pd.Interval(left=1.4,right=1.8,closed='right')
+    elif 1.8< carreal.iloc[0].engine <= 2.4:
+      carreal.engine = pd.Interval(left=1.8,right=2.4,closed='right')
+    elif 2.4< carreal.iloc[0].engine <= 3.2:
+      carreal.engine = pd.Interval(left=2.4,right=3.2,closed='right') 
+# We also put the age into the correlating interval
+    if carreal.iloc[0].age < 2:
+      carreal.age = pd.Interval(left=-0.001,right=2.0,closed='right')
+    elif 2 < carreal.iloc[0].age <= 4:
+      carreal.age = pd.Interval(left=2.0,right=4.0,closed='right')
+    elif 4 < carreal.iloc[0].age <= 8:
+      carreal.age = pd.Interval(left=4.0,right=8.0,closed='right')  
+    elif 8 < carreal.iloc[0].age <= 16:
+      carreal.age = pd.Interval(left=8.0,right=16.0,closed='right')  
+# Even though there is only one row in the dataframe, we name it in the consistent manner with the model
+# Notably we don't drop the first column, as this would get rid of all our information
+    carreal = pd.get_dummies(carreal, columns = ['fuel'], drop_first = False, prefix = 'fuel')
+    carreal = pd.get_dummies(carreal, columns = ['body'], drop_first = False, prefix = 'body')
+    carreal = pd.get_dummies(carreal, columns = ['age'], drop_first = False, prefix = 'age')
+    carreal = pd.get_dummies(carreal, columns = ['engine'], drop_first = False, prefix = 'engine')  
+# Here we check for the four model names which get different treatment by having models with only them in them. 
+# For each different model, we make the model for it using the buildamodel function
+    if (carreal.iloc[0]['name']=='Transit'):
+      params = buildamodel('Transit')
+# Then, we go through the column names in our input, find a match with the model, and alter the price accordingly
+      for key in carreal.iloc[0].to_dict():
+        if carreal.iloc[0].to_dict()[key]==1 and key in params:
+          real_price += params[key]      
+# We add the constant here                                  
+      autotrader_price = real_price+params['const'] 
+# We now take into consideration the damage of the car
+      your_price = discount*autotrader_price     
+# Finally we offer the customer a great price on their car!                                
+      return print(f'Autotrader predicted price: {autotrader_price}\nYour great price = {your_price}')    
+    if (carreal.iloc[0]['name']=='Transit Custom'):
+      params = buildamodel('Transit Custom')
+      for key in carreal.iloc[0].to_dict():
+        if carreal.iloc[0].to_dict()[key]==1 and key in params:
+          real_price += params[key]                                         
+      autotrader_price = real_price+params['const'] 
+      your_price = discount*autotrader_price                                     
+      return print(f'Autotrader predicted price: {autotrader_price}\n Your great price = {your_price}') 
+    if (carreal.iloc[0]['name']=='Mustang'):
+      params = buildamodel('Mustang')
+      for key in carreal.iloc[0].to_dict():
+        if carreal.iloc[0].to_dict()[key]==1 and key in params:
+          real_price += params[key]                                     
+      autotrader_price = real_price+params['const'] 
+      your_price = discount*autotrader_price                                     
+      return print(f'Autotrader predicted price: {autotrader_price}\n Your great price = {your_price}') 
+    if (carreal.iloc[0]['name']=='Ranger'):
+      params = buildamodel('Ranger')
+      for key in carreal.iloc[0].to_dict():
+        if carreal.iloc[0].to_dict()[key]==1 and key in params:
+          real_price += params[key]                                         
+      autotrader_price = real_price+params['const'] 
+      your_price = discount*autotrader_price                                     
+      return print(f'Autotrader predicted price: {autotrader_price}\nYour great price = {your_price}')   
+    if (carreal.iloc[0]['name']=='Edge'):
+      params = buildamodel('Edge')
+      for key in carreal.iloc[0].to_dict():
+        if carreal.iloc[0].to_dict()[key]==1 and key in params:
+          real_price += params[key]                                         
+      autotrader_price = real_price+params['const'] 
+      your_price = discount*autotrader_price                                     
+      return print(f'Autotrader predicted price: {autotrader_price}\nYour great price = {your_price}')  
+# We do exactly the same thing for all other models, except we use our main model found further up, and we dummy name since this isn't the same for every row
+    carreal = pd.get_dummies(carreal, columns = ['name'], drop_first = False, prefix = 'name')  
+    for key in carreal.iloc[0].to_dict():
+      if carreal.iloc[0].to_dict()[key]==1 and key in results.params.to_dict():
+        real_price += results.params.to_dict()[key]   
+        autotrader_price = real_price+results.params.to_dict()['const'] 
+        your_price = discount*autotrader_price                                     
+    return print(f'Autotrader predicted price: {autotrader_price}\nYour great price = {your_price}')         
+  else:
+    print('This model is for Fords only!')   
+# These inputs must be done quite accurately
+suggest_price__MAKE({'BHP': 99.0,
+ 'ULEZ': 'ULEZ',
+ 'body': 'Hatchback',
+ 'Engine': '1.4L',
+ 'fuel': 'Diesel',
+ 'mileage': 70000.0,
+ 'make': 'Ford',
+ 'model': 'Fiesta',
+ 'owners': '3',
+ 'transmission': 'Automatic',
+ 'year': '2005 (05 reg)',
+ 'Condition':'No Damage'}
+)
+
+
+# Coefficients of the main model
+results.params.to_dict()
